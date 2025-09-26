@@ -23,17 +23,19 @@ with open(os.path.join(package, "requirements.txt"), "r") as fileObj:
 # https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/
 setup(
     name=package,
-    version="0.9",
+    version="1.0.1",
     python_requires=">=3.7",
     description="eTextEdit, a lightweight text editor built on prompt-toolkit",
     long_description=long_description,
     author="Eliran Wong",
-    author_email="support@letmedoit.ai",
+    author_email="support@toolmate.ai",
     packages=[
         package,
+        f"{package}.etextedit_plugins",
     ],
     package_data={
         package: ["*.*"],
+        f"{package}.etextedit_plugins": ["*.*"],
     },
     license="GNU General Public License (GPL)",
     install_requires=install_requires,
@@ -48,7 +50,7 @@ setup(
         "Source": "https://github.com/eliranwong/eTextEdit",
         "Tracker": "https://github.com/eliranwong/eTextEdit/issues",
         "Documentation": "https://github.com/eliranwong/eTextEdit/wiki",
-        "Funding": "https://www.paypal.me/MarvelBible",
+        "Funding": "https://www.paypal.com/paypalme/toolmate",
     },
     classifiers=[
         # Reference: https://pypi.org/classifiers/
