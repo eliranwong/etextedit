@@ -14,7 +14,7 @@ Modified and Enhanced by Eliran Wong:
 * support file argument, e.g. etextedit <filename>
 * support startup with clipboard text content, e.g. etextedit -p true
 * support printing
-* support plugins to extend the functionalities; place plugins in ~/etextedit/plugins
+* support plugins, written in python, to extend the editor functionalities; place plugins in ~/etextedit/plugins
 
 Check plugins examples at https://github.com/eliranwong/agentmake/tree/main/agentmake/etextedit_plugins
 
@@ -22,6 +22,8 @@ eTextEdit repository:
 https://github.com/eliranwong/eTextEdit
 
 # Screenshots
+
+<img width="706" height="519" alt="Image" src="https://github.com/user-attachments/assets/dcd4f05d-3e43-4f4b-96b2-5994fda130bf" />
 
 ![search_replace](https://github.com/eliranwong/eTextEdit/assets/25262722/c7a564ce-2e3c-4913-8210-52e259545044?raw=True)
 
