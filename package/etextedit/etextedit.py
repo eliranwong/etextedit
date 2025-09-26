@@ -19,6 +19,7 @@ Modified and Enhanced by Eliran Wong:
 * support printing
 * support plugins to extend the functionalities; place plugins in ~/etextedit/plugins
 * support export options to DOCX and PDF when pandoc is installed
+* integrated with AgentMake AI and BibleMate AI if installed
 
 eTextEdit repository:
 https://github.com/eliranwong/eTextEdit
@@ -667,7 +668,8 @@ def do_about():
 * support startup with clipboard text content, e.g. etextedit -p true
 * support printing
 * support plugins
-* support export options to DOCX and PDF when pandoc is installed"""
+* support export options to DOCX and PDF when pandoc is installed
+* integrated with AgentMake AI and BibleMate AI if installed"""
     show_message("About", f"Text Editor\nOriginally created by Jonathan Slenders\nEnhanced by Eliran Wong:{enhancedFeatures}")
 
 def show_message(title, text):

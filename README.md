@@ -100,3 +100,23 @@ escape + z: go to end of document
 escape + b: go to beginning of current line
 
 escape + e: go to end of current line
+
+## Plugins
+
+An 'etextedit' plugin is designed to run script to process the selected text or the whole text in the editor.
+
+Examples of 'etextedit' plugins:
+
+https://github.com/eliranwong/etextedit/tree/main/package/etextedit/etextedit_plugins
+
+https://github.com/eliranwong/agentmake/tree/main/agentmake/etextedit_plugins
+
+https://github.com/eliranwong/biblemate/tree/main/package/biblemate/etextedit/plugins
+
+User can create custom plugins and place them in directory '~/etextedit/plugins' for them to work with 'etextedit'.
+
+Each 'etextedit' plugin is written in python.
+
+Read the comments in the following example to get ideas how to write a plugin:
+
+https://github.com/eliranwong/etextedit/blob/main/package/etextedit/etextedit_plugins/Change%20to%20Upper%20Cases.py
