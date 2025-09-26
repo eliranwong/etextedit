@@ -15,12 +15,28 @@ Modified and Enhanced by Eliran Wong:
 * added dark theme and lexer style
 * support stdin, e.g. echo "Hello world!" | etextedit
 * support file argument, e.g. etextedit <filename>
-* support plugins (forthcoming)
+* support startup with clipboard text content, e.g. etextedit -p true
+* support printing
+* support plugins to extend the functionalities; place plugins in ~/etextedit/plugins
+
+Check plugins examples at https://github.com/eliranwong/agentmake/tree/main/agentmake/etextedit_plugins
 
 eTextEdit repository:
 https://github.com/eliranwong/eTextEdit
+
+Remarks: This is a modified edition of etextedit that work with AgentMake AI
 """
-import datetime, sys, os, re, webbrowser, shutil, wcwidth
+import os
+startupPath = os.getcwd()
+
+try:
+    # support plugins that work with agentmake
+    from agentmake import agentmake
+except:
+    pass
+import subprocess, warnings
+import datetime, sys, os, re, webbrowser, shutil, wcwidth, argparse, pyperclip, platform, subprocess, pydoc
+from pathlib import Path
 from asyncio import Future, ensure_future
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from prompt_toolkit.input import create_input
@@ -61,6 +77,7 @@ from prompt_toolkit.widgets import (
     Checkbox,
 )
 
+
 class ApplicationState:
     """
     Application state.
@@ -78,6 +95,8 @@ class ApplicationState:
     search_pattern = ""
     replace_pattern = ""
     clipboard = PyperclipClipboard()
+    exit_without_saving = False
+    allow_go_to_end = True
 
 def get_statusbar_text():
     return " [esc-m] menu [ctrl+k] help "
@@ -479,6 +498,9 @@ def _(_):
 @bindings.add("c-w")
 def _(_):
     do_save_as_file()
+@bindings.add("c-p")
+def _(_):
+    do_print()
 
 # edit
 @bindings.add("c-i")
@@ -589,9 +611,11 @@ def do_about():
 * added key bindings
 * added handling of unasaved changes
 * added dark theme and lexer style
-* support stdin, e.g. echo "Hello world!" | python3 eTextEdit.py
-* support file argument, e.g. python3 eTextEdit.py <filename>
-* support plugins (forthcoming)"""
+* support stdin, e.g. echo "Hello world!" | etextedit
+* support file argument, e.g. etextedit <filename>
+* support startup with clipboard text content, e.g. etextedit -p true
+* support printing
+* support plugins"""
     show_message("About", f"Text Editor\nOriginally created by Jonathan Slenders\nEnhanced by Eliran Wong:{enhancedFeatures}")
 
 def show_message(title, text):
@@ -649,7 +673,7 @@ def do_help():
     webbrowser.open("https://github.com/eliranwong/eTextEdit")
 
 def do_exit():
-    check_changes_before_execute(get_app().exit)
+    get_app().exit() if ApplicationState.exit_without_saving else check_changes_before_execute(get_app().exit)
 
 def do_time_date():
     text = datetime.datetime.now().isoformat()
@@ -658,6 +682,11 @@ def do_time_date():
 def do_add_spaces(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
     buffer.insert_text("    ")
+
+def do_go_to_end_once(_):
+    if ApplicationState.allow_go_to_end:
+        text_field.buffer.cursor_position = len(text_field.text)
+        ApplicationState.allow_go_to_end = False
 
 def do_go_to():
     async def coroutine():
@@ -689,12 +718,12 @@ def do_redo(event=None):
 def do_cut(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
     data = buffer.cut_selection()
-    get_app().clipboard.set_data(data)
+    pydoc.pipepager(data, cmd="termux-clipboard-set") if shutil.which("termux-clipboard-set") else get_app().clipboard.set_data(data)
 
 def do_copy(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
     data = buffer.copy_selection()
-    get_app().clipboard.set_data(data)
+    pydoc.pipepager(data, cmd="termux-clipboard-set") if shutil.which("termux-clipboard-set") else get_app().clipboard.set_data(data)
 
 def do_backspace(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
@@ -709,6 +738,18 @@ def do_delete(event=None):
     # forward delete one character if there is no selection
     if not data.text and buffer.cursor_position < len(buffer.text):
         buffer.delete(1)
+
+def do_print():
+    if content := text_field.text:
+        thisFile = os.path.realpath(__file__)
+        packageFolder = os.path.dirname(thisFile)
+        tempFile = os.path.join(packageFolder, "temp", "etextedit.txt")
+        with open(tempFile, "w", encoding="utf-8") as fileObj:
+            fileObj.write(content)
+        if platform.system() == "Windows":
+            os.system(f'''notepad /p "{tempFile}"''')
+        else:
+            os.system(f'''lp "{tempFile}"''')
 
 def do_find():
     start_search(text_field.control)
@@ -727,7 +768,7 @@ def do_find_next():
 def do_paste(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
     buffer.cut_selection()
-    clipboardText = ApplicationState.clipboard.get_data().text
+    clipboardText = subprocess.run("termux-clipboard-get", shell=True, capture_output=True, text=True).stdout if shutil.which("termux-clipboard-get") else ApplicationState.clipboard.get_data().text
     buffer.insert_text(clipboardText)
     # the following line does not work well; cursor position not aligned
     #text_field.buffer.paste_clipboard_data(get_app().clipboard.get_data())
@@ -755,6 +796,27 @@ def do_status_bar():
 # The menu container.
 #
 
+plugins = []
+
+builtin_pluginFolder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "plugins")
+#builtin_pluginFolder = os.path.join(os.path.dirname(os.path.realpath(__file__)), "etextedit_plugins") # edit for AgentMake AI
+user_pluginFolder = os.path.join(os.path.expanduser("~"), "etextedit", "plugins")
+for pluginFolder in (builtin_pluginFolder, user_pluginFolder):
+    if not os.path.isdir(pluginFolder):
+        Path(pluginFolder).mkdir(parents=True, exist_ok=True)
+    for file in os.listdir(pluginFolder):
+        if file.endswith(".py"):
+            pluginPath = os.path.join(pluginFolder, file)
+            pluginName = os.path.splitext(file)[0]
+            try:
+                with open(pluginPath, "r", encoding="utf-8") as fileObj:
+                    pluginCode = fileObj.read()
+                exec(pluginCode, globals())
+                handler = pluginName.replace(" ", "_").lower()
+                exec(f'''plugins.append(MenuItem(pluginName, handler={handler}))''', globals())
+            except Exception as e:
+                print(f"Error loading plugin {pluginName}: {e}")
+
 root_container = MenuContainer(
     body=body,
     menu_items=[
@@ -765,6 +827,8 @@ root_container = MenuContainer(
                 MenuItem("[O] Open", handler=do_open_file),
                 MenuItem("[S] Save", handler=do_save_file),
                 MenuItem("[W] Save as", handler=do_save_as_file),
+                MenuItem("-", disabled=True),
+                MenuItem("[P] Print", handler=do_print),
                 MenuItem("-", disabled=True),
                 MenuItem("[Q] Exit", handler=do_exit),
             ],
@@ -794,12 +858,14 @@ root_container = MenuContainer(
             ],
         ),
         MenuItem(
-            "View",
-            children=[MenuItem("Status Bar", handler=do_status_bar)],
+            "Plugins",
+            children=plugins,
         ),
         MenuItem(
             "Info",
             children=[
+                MenuItem("Status Bar", handler=do_status_bar),
+                MenuItem("-", disabled=True),
                 MenuItem("About", handler=do_about),
                 MenuItem("Help", handler=do_help),
             ],
@@ -820,7 +886,7 @@ custom_style = Style.from_dict(
     {
         "status": "reverse",
         "shadow": "bg:#440044",
-        "textarea": "bg:#1E1E1E",
+        "textarea": "bg:#1E1E1E fg:white",
         "search-toolbar": "bg:#1E1E1E",
         "button.focused": "bg:#F9AAF8 fg:#000000"
     }
@@ -844,10 +910,11 @@ combined_style = merge_styles([
 
 layout = Layout(root_container, focused_element=text_field)
 
-def update_title():
-    set_title(f'''eTextEdit - {os.path.basename(ApplicationState.current_path) if ApplicationState.current_path else "NEW"}''')
+def update_title(customTitle=None):
+    set_title(customTitle if customTitle is not None else f'''eTextEdit - {os.path.basename(ApplicationState.current_path) if ApplicationState.current_path else "NEW"}''')
 
-def launch(input_text=None, filename=None):
+def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=None, startAtEnd=False):
+    ApplicationState.exit_without_saving = exitWithoutSaving
     if filename and os.path.isfile(filename):
         try:
             with open(filename, "r", encoding="utf-8") as fileObj:
@@ -859,7 +926,7 @@ def launch(input_text=None, filename=None):
     if filename:
         ApplicationState.current_path = filename
         ApplicationState.saved_text = fileText
-    update_title()
+    update_title(customTitle)
     if filename and input_text:
         # append file text with input text
         text_field.text = f"{fileText}\n{input_text}"
@@ -877,25 +944,51 @@ def launch(input_text=None, filename=None):
         full_screen=True,
         input=input,
         clipboard=ApplicationState.clipboard,
+        before_render=do_go_to_end_once if startAtEnd else None,
     )
     application.run()
     clear_title()
     return text_field.text
 
 def main():
+    os.chdir(startupPath)
     if len(sys.argv) > 1:
-        #filename = sys.argv[1] if len(sys.argv) == 2 else " ".join(sys.argv[1:])
-        # take the first argument as filename
-        filename = sys.argv[1]
-        try:
+
+        # Create the parser
+        parser = argparse.ArgumentParser(description="LetMeDoIt AI cli options")
+        # Add arguments
+        parser.add_argument("default", nargs="?", default=None, help="File path")
+        parser.add_argument('-p', '--paste', action='store', dest='paste', help="Set 'true' to paste clipboard text as initial text with -p flag")
+        # Parse arguments
+        args = parser.parse_args()
+
+        if args.default:
+            filename = args.default
             # create file if it does not exist
             if not os.path.isfile(filename):
-                open(filename, "a", encoding="utf-8").close()
-            if not sys.stdin.isatty():
-                input_text = sys.stdin.read()
+                try:
+                    open(filename, "a", encoding="utf-8").close()
+                except:
+                    filename = ""
+        else:
+            filename = ""
+        
+        input_text = ""
+        if not sys.stdin.isatty():
+            input_text = sys.stdin.read()
+        if args.paste and args.paste.lower() == "true":
+            clipboardText = subprocess.run("termux-clipboard-get", shell=True, capture_output=True, text=True).stdout if shutil.which("termux-clipboard-get") else pyperclip.paste()
+            input_text = f"{input_text}\n\n{clipboardText}" if input_text else clipboardText
+
+        try:
+            if filename and input_text:
                 text = launch(input_text=input_text, filename=filename)
-            else:
+            elif filename:
                 text = launch(filename=filename)
+            elif input_text:
+                text = launch(input_text=input_text)
+            else:
+                text = launch()
         except:
             text = launch()
     elif not sys.stdin.isatty():
@@ -904,6 +997,7 @@ def main():
     else:
         text = launch()
     #print(text)
+    #return text
 
 if __name__ == "__main__":
     main()

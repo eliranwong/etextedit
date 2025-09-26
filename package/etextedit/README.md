@@ -10,9 +10,13 @@ Modified and Enhanced by Eliran Wong:
 * added key bindings
 * added handling of unasaved changes
 * added dark theme and lexer style
-* support stdin, e.g. echo "Hello world!" | python3 eTextEdit.py
-* support file argument, e.g. python3 eTextEdit.py <filename>
-* support plugins (forthcoming)
+* support stdin, e.g. echo "Hello world!" | etextedit
+* support file argument, e.g. etextedit <filename>
+* support startup with clipboard text content, e.g. etextedit -p true
+* support printing
+* support plugins to extend the functionalities; place plugins in ~/etextedit/plugins
+
+Check plugins examples at https://github.com/eliranwong/agentmake/tree/main/agentmake/etextedit_plugins
 
 eTextEdit repository:
 https://github.com/eliranwong/eTextEdit
