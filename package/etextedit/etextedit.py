@@ -19,7 +19,7 @@ Modified and Enhanced by Eliran Wong:
 * support printing
 * support plugins to extend the functionalities; place plugins in ~/etextedit/plugins
 * support export options to DOCX and PDF when pandoc is installed
-* integrated with AgentMake AI and BibleMate AI if installed
+* integrated with AgentMake AI
 
 eTextEdit repository:
 https://github.com/eliranwong/eTextEdit
@@ -110,7 +110,7 @@ def get_augment_instruction(instruction: str, content: str) -> str:
     return f"Apply the following instruction to the `User Content` in the `# User Content` section.\n\n# Instruction\n\n{instruction}\n\n# User Content\n\n{content}"
 
 def get_statusbar_text():
-    return " [esc-m] menu [ctrl+k] help "
+    return " [esc-m] menu [ctrl+y] help "
 
 def get_statusbar_right_text():
     return " {}:{}  ".format(
@@ -388,7 +388,7 @@ def _(event):
 
 # Basic
 # help
-@bindings.add("c-k")
+@bindings.add("c-y")
 def _(_):
     do_help()
 # quit
@@ -569,17 +569,20 @@ def _(event):
 # Handlers for menu items.
 #
 
-def do_save_file():
-    if ApplicationState.current_path:
-        try:
-            with open(ApplicationState.current_path, "w", encoding="utf-8") as fileObj:
-                fileObj.write(text_field.text)
-            ApplicationState.saved_text = text_field.text
-        except OSError as e:
-            show_message("Error", f"{e}")
+def do_save_file(force_save=False):
+    if ApplicationState.exit_without_saving and not force_save:
+        get_app().exit()
     else:
-        do_save_as_file()
-    update_title()
+        if ApplicationState.current_path:
+            try:
+                with open(ApplicationState.current_path, "w", encoding="utf-8") as fileObj:
+                    fileObj.write(text_field.text)
+                ApplicationState.saved_text = text_field.text
+            except OSError as e:
+                show_message("Error", f"{e}")
+        else:
+            do_save_as_file()
+        update_title()
 
 def do_save_as_file():
     async def coroutine():
@@ -593,7 +596,7 @@ def do_save_as_file():
         ApplicationState.current_path = path
 
         if path is not None:
-            do_save_file()
+            do_save_file(force_save=True)
 
     ensure_future(coroutine())
 
@@ -669,7 +672,7 @@ def do_about():
 * support printing
 * support plugins
 * support export options to DOCX and PDF when pandoc is installed
-* integrated with AgentMake AI and BibleMate AI if installed"""
+* integrated with AgentMake AI"""
     show_message("About", f"Text Editor\nOriginally created by Jonathan Slenders\nEnhanced by Eliran Wong:{enhancedFeatures}")
 
 def show_message(title, text):
@@ -737,9 +740,9 @@ def do_add_spaces(event=None):
     buffer = event.app.current_buffer if event is not None else text_field.buffer
     buffer.insert_text("    ")
 
-def do_go_to_end_once(_):
+def do_go_to_end_once(cursor_position):
     if ApplicationState.allow_go_to_end:
-        text_field.buffer.cursor_position = len(text_field.text)
+        text_field.buffer.cursor_position = cursor_position
         ApplicationState.allow_go_to_end = False
 
 def do_go_to():
@@ -846,6 +849,24 @@ def do_select_all(event=None):
 def do_status_bar():
     ApplicationState.show_status_bar = not ApplicationState.show_status_bar
 
+def do_export_md():
+    async def coroutine():
+        save_dialog = TextInputDialog(
+            title="Export to Markdown",
+            label_text="Enter the path of the exported file:",
+            completer=PathCompleter(),
+        )
+
+        path = await show_dialog_as_float(save_dialog)
+
+        if path is not None:
+            if path.endswith(".md"):
+                path = path[:-3]
+            with open(f"{path}.md", "w", encoding="utf-8") as fileObj:
+                fileObj.write(text_field.text)
+
+    ensure_future(coroutine())
+
 def do_export_docx():
     async def coroutine():
         save_dialog = TextInputDialog(
@@ -890,17 +911,19 @@ file_items = [
     MenuItem("[S] Save", handler=do_save_file),
     MenuItem("[W] Save as", handler=do_save_as_file),
     MenuItem("-", disabled=True),
+    MenuItem("Export to Markdown", handler=do_export_md),
+    MenuItem("-", disabled=True),
     MenuItem("[P] Print", handler=do_print),
     MenuItem("-", disabled=True),
     MenuItem("[Q] Exit", handler=do_exit),
 ]
 # Enable pandoc related features if pandoc is installed
 if shutil.which("pandoc"):
-    file_items.insert(4, MenuItem("Export to DOCX", handler=do_export_docx))
+    file_items.insert(6, MenuItem("Export to DOCX", handler=do_export_docx))
 # pdflatex is required to export to PDF
 # Install, e.g. sudo apt install texlive-full
 if shutil.which("pandoc") and shutil.which("pdflatex"):
-    file_items.insert(4, MenuItem("Export to PDF", handler=do_export_pdf))
+    file_items.insert(6, MenuItem("Export to PDF", handler=do_export_pdf))
 
 plugins = [
     MenuItem("Toggle Auto Agent", handler=do_toggle_auto_agent),
@@ -1015,7 +1038,7 @@ layout = Layout(root_container, focused_element=text_field)
 def update_title(customTitle=None):
     set_title(customTitle if customTitle is not None else f'''eTextEdit - {os.path.basename(ApplicationState.current_path) if ApplicationState.current_path else "NEW"}''')
 
-def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=None, startAtEnd=False):
+def get_editor_app(input_text=None, filename=None, exitWithoutSaving=False, startAt=0):
     ApplicationState.exit_without_saving = exitWithoutSaving
     if filename and os.path.isfile(filename):
         try:
@@ -1028,7 +1051,6 @@ def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=
     if filename:
         ApplicationState.current_path = filename
         ApplicationState.saved_text = fileText
-    update_title(customTitle)
     if filename and input_text:
         # append file text with input text
         text_field.text = f"{fileText}\n{input_text}"
@@ -1038,7 +1060,7 @@ def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=
         text_field.text = input_text
     # create a custom input to work with stdin without EOFError
     input = create_input(always_prefer_tty=True)
-    application = Application(
+    return Application(
         layout=layout,
         enable_page_navigation_bindings=True,
         style=combined_style,
@@ -1046,9 +1068,20 @@ def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=
         full_screen=True,
         input=input,
         clipboard=ApplicationState.clipboard,
-        before_render=do_go_to_end_once if startAtEnd else None,
+        before_render=lambda _: do_go_to_end_once(startAt) if startAt else None,
     )
+
+def launch(input_text=None, filename=None, exitWithoutSaving=False, customTitle=None, startAt=0):
+    update_title(customTitle)
+    application = get_editor_app(input_text=input_text, filename=filename, exitWithoutSaving=exitWithoutSaving, startAt=startAt)
     application.run()
+    clear_title()
+    return text_field.text
+
+async def launch_async(input_text=None, filename=None, exitWithoutSaving=False, customTitle=None, startAt=0):
+    update_title(customTitle)
+    application = get_editor_app(input_text=input_text, filename=filename, exitWithoutSaving=exitWithoutSaving, startAt=startAt)
+    await application.run_async()
     clear_title()
     return text_field.text
 
@@ -1057,7 +1090,7 @@ def main():
     if len(sys.argv) > 1:
 
         # Create the parser
-        parser = argparse.ArgumentParser(description="LetMeDoIt AI cli options")
+        parser = argparse.ArgumentParser(description="eTextEdit command line options")
         # Add arguments
         parser.add_argument("default", nargs="?", default=None, help="File path")
         parser.add_argument('-p', '--paste', action='store', dest='paste', help="Set 'true' to paste clipboard text as initial text with -p flag")
