@@ -23,7 +23,7 @@ with open(os.path.join(package, "requirements.txt"), "r") as fileObj:
 # https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/
 setup(
     name=package,
-    version="1.0.4",
+    version="1.0.6",
     python_requires=">=3.7",
     description="eTextEdit, a lightweight text editor built on prompt-toolkit",
     long_description=long_description,
